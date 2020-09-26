@@ -1,0 +1,5 @@
+experiments/*
+__pycache__*
+.vector_cache*
+plan.txt
+knowledge_graph/*.json
