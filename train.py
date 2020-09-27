@@ -122,6 +122,8 @@ def train(train_loader, model, vocabs, criterion, optimizer, epoch):
         # get inputs
         input = batch.input
         logical_form = batch.logical_form
+        predicate_p = batch.predicate_pointer
+        type_p = batch.type_pointer
 
         # compute output
         output = model(input, logical_form[:, :-1])
@@ -129,6 +131,8 @@ def train(train_loader, model, vocabs, criterion, optimizer, epoch):
         # prepare targets
         target = {
             LOGICAL_FORM: logical_form[:, 1:].contiguous().view(-1), # (batch_size * trg_len)
+            PREDICATE_POINTER: predicate_p.contiguous().view(-1),
+            TYPE_POINTER: type_p.contiguous().view(-1)
         }
 
         # compute loss
@@ -160,6 +164,8 @@ def validate(val_loader, model, vocabs, criterion):
             # get inputs
             input = batch.input
             logical_form = batch.logical_form
+            predicate_p = batch.predicate_pointer
+            type_p = batch.type_pointer
 
             # compute output
             output = model(input, logical_form[:, :-1])
@@ -167,6 +173,8 @@ def validate(val_loader, model, vocabs, criterion):
             # prepare targets
             target = {
                 LOGICAL_FORM: logical_form[:, 1:].contiguous().view(-1), # (batch_size * trg_len)
+                PREDICATE_POINTER: predicate_p.contiguous().view(-1),
+                TYPE_POINTER: type_p.contiguous().view(-1)
             }
 
             # compute loss

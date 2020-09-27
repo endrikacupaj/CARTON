@@ -13,14 +13,18 @@ class CARTON(nn.Module):
         self.vocabs = vocabs
         self.encoder = Encoder(vocabs[INPUT], DEVICE)
         self.decoder = Decoder(vocabs[LOGICAL_FORM], DEVICE)
+        self.classifier = ClassifierNetworks(vocabs[PREDICATE_POINTER], vocabs[TYPE_POINTER])
 
     def forward(self, src_tokens, trg_tokens):
         encoder_out = self.encoder(src_tokens)
         decoder_out, decoder_h = self.decoder(src_tokens, trg_tokens, encoder_out)
         encoder_ctx = encoder_out[:, -1:, :]
+        predicate_out, type_out = self.classifier(encoder_ctx, decoder_h)
 
         return {
-            LOGICAL_FORM: decoder_out
+            LOGICAL_FORM: decoder_out,
+            PREDICATE_POINTER: predicate_out,
+            TYPE_POINTER: type_out
         }
 
     def _predict_encoder(self, src_tensor):
@@ -40,13 +44,32 @@ class CARTON(nn.Module):
                 DECODER_OUT: decoder_out
             }
 
-class LstmFlatten(nn.Module):
-    def forward(self, x):
-        return x[0].squeeze(1)
-
 class Flatten(nn.Module):
     def forward(self, x):
         return x.contiguous().view(-1, x.shape[-1])
+
+class ClassifierNetworks(nn.Module):
+    def __init__(self, predicate_vocab, type_vocab):
+        super(ClassifierNetworks, self).__init__()
+        self.predicate_cls = nn.Sequential(
+            nn.Linear(args.emb_dim*2, args.emb_dim),
+            nn.LeakyReLU(),
+            Flatten(),
+            nn.Dropout(args.dropout),
+            nn.Linear(args.emb_dim, len(predicate_vocab))
+        )
+
+        self.type_cls = nn.Sequential(
+            nn.Linear(args.emb_dim*2, args.emb_dim),
+            nn.LeakyReLU(),
+            Flatten(),
+            nn.Dropout(args.dropout),
+            nn.Linear(args.emb_dim, len(type_vocab))
+        )
+
+    def forward(self, encoder_ctx, decoder_h):
+        x = torch.cat([encoder_ctx.expand(decoder_h.shape), decoder_h], dim=-1)
+        return self.predicate_cls(x), self.type_cls(x)
 
 class Encoder(nn.Module):
     def __init__(self, vocabulary, device, embed_dim=args.emb_dim, layers=args.layers,

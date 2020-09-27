@@ -14,9 +14,10 @@ class CSQADataset:
         self.load_data_and_fields()
 
     def _prepare_data(self, data):
+        ids = []
         input_data = []
         helper_data = {QUESTION_TYPE: []}
-        for conversation in data:
+        for j, conversation in enumerate(data):
             prev_user_conv = None
             prev_system_conv = None
             is_clarification = False
@@ -25,6 +26,7 @@ class CSQADataset:
             for i in range(turns):
                 input = []
                 logical_form = []
+                entity_turn = []
                 entity_pointer = []
                 predicate_pointer = []
                 type_pointer = []
@@ -101,18 +103,31 @@ class CSQADataset:
                 for action in gold_actions:
                     if action[0] == ACTION:
                         logical_form.append(action[1])
+                        predicate_pointer.append(NA_TOKEN)
+                        type_pointer.append(NA_TOKEN)
                     elif action[0] == RELATION:
                         logical_form.append(RELATION)
+                        predicate_pointer.append(action[1])
+                        type_pointer.append(NA_TOKEN)
                     elif action[0] == TYPE:
                         logical_form.append(TYPE)
+                        predicate_pointer.append(NA_TOKEN)
+                        type_pointer.append(action[1])
                     elif action[0] == ENTITY:
                         logical_form.append(PREV_ANSWER if action[1] == PREV_ANSWER else ENTITY)
+                        predicate_pointer.append(NA_TOKEN)
+                        type_pointer.append(NA_TOKEN)
                     elif action[0] == VALUE:
                         logical_form.append(action[0])
+                        predicate_pointer.append(NA_TOKEN)
+                        type_pointer.append(NA_TOKEN)
                     else:
                         raise Exception(f'Unkown logical form action {action[0]}')
 
-                input_data.append([input, logical_form])
+                    assert len(logical_form) == len(predicate_pointer)
+                    assert len(logical_form) == len(type_pointer)
+
+                input_data.append([input, logical_form, predicate_pointer, type_pointer])
                 helper_data[QUESTION_TYPE].append(user['question-type'])
 
         return input_data, helper_data
@@ -308,7 +323,20 @@ class CSQADataset:
                                 lower=True,
                                 batch_first=True)
 
-        fields_tuple = [(INPUT, self.input_field), (LOGICAL_FORM, self.lf_field)]
+        self.predicate_field = Field(init_token=NA_TOKEN,
+                                eos_token=NA_TOKEN,
+                                pad_token=PAD_TOKEN,
+                                unk_token=NA_TOKEN,
+                                batch_first=True)
+
+        self.type_field = Field(init_token=NA_TOKEN,
+                                eos_token=NA_TOKEN,
+                                pad_token=PAD_TOKEN,
+                                unk_token=NA_TOKEN,
+                                batch_first=True)
+
+        fields_tuple = [(INPUT, self.input_field), (LOGICAL_FORM, self.lf_field),
+                        (PREDICATE_POINTER, self.predicate_field), (TYPE_POINTER, self.type_field)]
 
         # create toechtext datasets
         self.train_data = self._make_torchtext_dataset(train, fields_tuple)
@@ -318,6 +346,8 @@ class CSQADataset:
         # build vocabularies
         self.input_field.build_vocab(self.train_data, self.val_data, self.test_data, min_freq=0, vectors='glove.840B.300d')
         self.lf_field.build_vocab(self.train_data, self.val_data, self.test_data, min_freq=0)
+        self.predicate_field.build_vocab(self.train_data, self.val_data, self.test_data, min_freq=0)
+        self.type_field.build_vocab(self.train_data, self.val_data, self.test_data, min_freq=0)
 
     def get_data(self):
         return self.train_data, self.val_data, self.test_data
@@ -328,11 +358,15 @@ class CSQADataset:
     def get_fields(self):
         return {
             INPUT: self.input_field,
-            LOGICAL_FORM: self.lf_field
+            LOGICAL_FORM: self.lf_field,
+            PREDICATE_POINTER: self.predicate_field,
+            TYPE_POINTER: self.type_field
         }
 
     def get_vocabs(self):
         return {
             INPUT: self.input_field.vocab,
-            LOGICAL_FORM: self.lf_field.vocab
+            LOGICAL_FORM: self.lf_field.vocab,
+            PREDICATE_POINTER: self.predicate_field.vocab,
+            TYPE_POINTER: self.type_field.vocab
         }

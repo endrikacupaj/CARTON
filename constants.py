@@ -21,6 +21,9 @@ DEVICE = torch.device(CUDA if torch.cuda.is_available() else CPU)
 # fields
 INPUT = 'input'
 LOGICAL_FORM = 'logical_form'
+ENTITY_POINTER = 'entity_pointer'
+PREDICATE_POINTER = 'predicate_pointer'
+TYPE_POINTER = 'type_pointer'
 MULTITASK = 'multitask'
 
 # helper tokens
