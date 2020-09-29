@@ -1,7 +1,7 @@
 import argparse
 
 def get_parser():
-    parser = argparse.ArgumentParser(description='LASAGNE')
+    parser = argparse.ArgumentParser(description='CARTON')
 
     # general
     parser.add_argument('--seed', default=1234, type=int)
