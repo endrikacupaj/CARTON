@@ -8,15 +8,16 @@ from constants import *
 
 class CSQADataset:
     def __init__(self):
+        self.id = 0
         self.train_path = str(ROOT_PATH.parent) + args.data_path + '/train/*'
         self.val_path = str(ROOT_PATH.parent) + args.data_path + '/val/*'
         self.test_path = str(ROOT_PATH.parent) + args.data_path + '/test/*'
         self.load_data_and_fields()
 
     def _prepare_data(self, data):
-        ids = []
         input_data = []
-        helper_data = {QUESTION_TYPE: []}
+        helper_data = {
+            QUESTION_TYPE: [], ENTITY: {GOLD: {}}}
         for j, conversation in enumerate(data):
             prev_user_conv = None
             prev_system_conv = None
@@ -26,8 +27,8 @@ class CSQADataset:
             for i in range(turns):
                 input = []
                 logical_form = []
-                entity_turn = []
-                entity_pointer = []
+                entity_pointer = set()
+                entity_gold = []
                 predicate_pointer = []
                 type_pointer = []
 
@@ -65,7 +66,34 @@ class CSQADataset:
                         prev_system_conv = next_system.copy()
                         continue
 
-                    # TODO: create here vocabularies
+                    if i == 0: # NA + [SEP] + NA + [SEP] + current_question
+                        input.extend([NA_TOKEN, SEP_TOKEN, NA_TOKEN, SEP_TOKEN])
+                    else:
+                        # add prev context user
+                        for context in prev_user_conv['context']: input.append(context[1])
+                        # sep token
+                        input.append(SEP_TOKEN)
+                        # add prev context answer
+                        for context in prev_system_conv['context']: input.append(context[1])
+                        # sep token
+                        input.append(SEP_TOKEN)
+
+                    # user context
+                    for context in user['context']: input.append(context[1])
+                    # system context
+                    for context in system['context']: input.append(context[1])
+                    # next user context
+                    for context in next_user['context']: input.append(context[1])
+
+                    # entities turn
+                    if 'entities' in prev_user_conv: entity_pointer.update(prev_user_conv['entities'])
+                    if 'entities_in_utterance' in prev_user_conv: entity_pointer.update(prev_user_conv['entities_in_utterance'])
+                    entity_pointer.update(prev_system_conv['entities_in_utterance'])
+                    if 'entities' in user: entity_pointer.update(user['entities'])
+                    if 'entities_in_utterance' in user: entity_pointer.update(user['entities_in_utterance'])
+                    entity_pointer.update(system['entities_in_utterance'])
+                    if 'entities' in next_user: entity_pointer.update(next_user['entities'])
+                    if 'entities_in_utterance' in next_user: entity_pointer.update(next_user['entities_in_utterance'])
 
                     # get gold actions
                     gold_actions = next_system[GOLD_ACTIONS]
@@ -92,6 +120,32 @@ class CSQADataset:
                         prev_system_conv = system.copy()
                         continue
 
+                    if i == 0: # NA + [SEP] + NA + [SEP] + current_question
+                        input.extend([NA_TOKEN, SEP_TOKEN, NA_TOKEN, SEP_TOKEN])
+                    else:
+                        # add prev context user
+                        for context in prev_user_conv['context']: input.append(context[1])
+
+                        # sep token
+                        input.append(SEP_TOKEN)
+
+                        # add prev context answer
+                        for context in prev_system_conv['context']: input.append(context[1])
+
+                        # sep token
+                        input.append(SEP_TOKEN)
+
+                    # user context
+                    for context in user['context']: input.append(context[1])
+
+                    # entities turn
+                    if prev_user_conv is not None and prev_system_conv is not None:
+                        if 'entities' in prev_user_conv: entity_pointer.update(prev_user_conv['entities'])
+                        if 'entities_in_utterance' in prev_user_conv: entity_pointer.update(prev_user_conv['entities_in_utterance'])
+                        entity_pointer.update(prev_system_conv['entities_in_utterance'])
+                    if 'entities' in user: entity_pointer.update(user['entities'])
+                    if 'entities_in_utterance' in user: entity_pointer.update(user['entities_in_utterance'])
+
                     # get gold actions
                     gold_actions = system[GOLD_ACTIONS]
 
@@ -99,36 +153,50 @@ class CSQADataset:
                     prev_user_conv = user.copy()
                     prev_system_conv = system.copy()
 
+                # prepare entities
+                entity_pointer = list(entity_pointer)
+                entity_pointer.insert(0, NA_TOKEN)
+
                 # prepare logical form
                 for action in gold_actions:
                     if action[0] == ACTION:
                         logical_form.append(action[1])
                         predicate_pointer.append(NA_TOKEN)
                         type_pointer.append(NA_TOKEN)
+                        entity_gold.append(entity_pointer.index(NA_TOKEN))
                     elif action[0] == RELATION:
                         logical_form.append(RELATION)
                         predicate_pointer.append(action[1])
                         type_pointer.append(NA_TOKEN)
+                        entity_gold.append(entity_pointer.index(NA_TOKEN))
                     elif action[0] == TYPE:
                         logical_form.append(TYPE)
                         predicate_pointer.append(NA_TOKEN)
                         type_pointer.append(action[1])
+                        entity_gold.append(entity_pointer.index(NA_TOKEN))
                     elif action[0] == ENTITY:
                         logical_form.append(PREV_ANSWER if action[1] == PREV_ANSWER else ENTITY)
                         predicate_pointer.append(NA_TOKEN)
                         type_pointer.append(NA_TOKEN)
+                        entity_gold.append(entity_pointer.index(action[1]) if action[1] != PREV_ANSWER else entity_pointer.index(NA_TOKEN))
                     elif action[0] == VALUE:
                         logical_form.append(action[0])
                         predicate_pointer.append(NA_TOKEN)
                         type_pointer.append(NA_TOKEN)
+                        entity_gold.append(entity_pointer.index(NA_TOKEN))
                     else:
                         raise Exception(f'Unkown logical form action {action[0]}')
 
-                    assert len(logical_form) == len(predicate_pointer)
-                    assert len(logical_form) == len(type_pointer)
+                assert len(logical_form) == len(predicate_pointer)
+                assert len(logical_form) == len(type_pointer)
+                assert len(logical_form) == len(entity_gold)
 
-                input_data.append([input, logical_form, predicate_pointer, type_pointer])
+                input_data.append([str(self.id), input, logical_form, predicate_pointer, type_pointer, entity_pointer])
+
                 helper_data[QUESTION_TYPE].append(user['question-type'])
+                helper_data[ENTITY][GOLD][str(self.id)] = entity_gold
+
+                self.id += 1
 
         return input_data, helper_data
 
@@ -309,6 +377,8 @@ class CSQADataset:
         test, self.test_helper = self._prepare_data(test)
 
         # create fields
+        self.id_field = Field(batch_first=True)
+
         self.input_field = Field(init_token=START_TOKEN,
                                 eos_token=CTX_TOKEN,
                                 pad_token=PAD_TOKEN,
@@ -335,8 +405,15 @@ class CSQADataset:
                                 unk_token=NA_TOKEN,
                                 batch_first=True)
 
-        fields_tuple = [(INPUT, self.input_field), (LOGICAL_FORM, self.lf_field),
-                        (PREDICATE_POINTER, self.predicate_field), (TYPE_POINTER, self.type_field)]
+        self.entity_field = Field(init_token=NA_TOKEN,
+                                eos_token=NA_TOKEN,
+                                pad_token=NA_TOKEN,
+                                unk_token=NA_TOKEN,
+                                batch_first=True)
+
+        fields_tuple = [(ID, self.id_field), (INPUT, self.input_field), (LOGICAL_FORM, self.lf_field),
+                        (PREDICATE_POINTER, self.predicate_field), (TYPE_POINTER, self.type_field),
+                        (ENTITY_POINTER, self.entity_field)]
 
         # create toechtext datasets
         self.train_data = self._make_torchtext_dataset(train, fields_tuple)
@@ -344,10 +421,12 @@ class CSQADataset:
         self.test_data = self._make_torchtext_dataset(test, fields_tuple)
 
         # build vocabularies
+        self.id_field.build_vocab(self.train_data, self.val_data, self.test_data, min_freq=0)
         self.input_field.build_vocab(self.train_data, self.val_data, self.test_data, min_freq=0, vectors='glove.840B.300d')
         self.lf_field.build_vocab(self.train_data, self.val_data, self.test_data, min_freq=0)
         self.predicate_field.build_vocab(self.train_data, self.val_data, self.test_data, min_freq=0)
         self.type_field.build_vocab(self.train_data, self.val_data, self.test_data, min_freq=0)
+        self.entity_field.build_vocab(self.train_data, self.val_data, self.test_data, min_freq=0)
 
     def get_data(self):
         return self.train_data, self.val_data, self.test_data
@@ -357,16 +436,20 @@ class CSQADataset:
 
     def get_fields(self):
         return {
+            ID: self.id_field,
             INPUT: self.input_field,
             LOGICAL_FORM: self.lf_field,
             PREDICATE_POINTER: self.predicate_field,
-            TYPE_POINTER: self.type_field
+            TYPE_POINTER: self.type_field,
+            ENTITY_POINTER: self.entity_field
         }
 
     def get_vocabs(self):
         return {
+            ID: self.id_field.vocab,
             INPUT: self.input_field.vocab,
             LOGICAL_FORM: self.lf_field.vocab,
             PREDICATE_POINTER: self.predicate_field.vocab,
-            TYPE_POINTER: self.type_field.vocab
+            TYPE_POINTER: self.type_field.vocab,
+            ENTITY_POINTER: self.entity_field.vocab
         }

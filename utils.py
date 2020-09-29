@@ -333,14 +333,20 @@ class MultiTaskLoss(nn.Module):
     def __init__(self, ignore_index):
         super().__init__()
         self.lf_loss = SingleTaskLoss(ignore_index)
+        self.pred_pointer = SingleTaskLoss(ignore_index)
+        self.type_pointer = SingleTaskLoss(ignore_index)
+        self.ent_pointer = SingleTaskLoss(ignore_index)
 
-        self.mml_emp = torch.Tensor([True])
+        self.mml_emp = torch.Tensor([True, True, True, True])
         self.log_vars = torch.nn.Parameter(torch.zeros(len(self.mml_emp)))
 
     def forward(self, output, target):
         # weighted loss
         task_losses = torch.stack((
-            self.lf_loss(output[LOGICAL_FORM], target[LOGICAL_FORM])
+            self.lf_loss(output[LOGICAL_FORM], target[LOGICAL_FORM]),
+            self.pred_pointer(output[PREDICATE_POINTER], target[PREDICATE_POINTER]),
+            self.type_pointer(output[TYPE_POINTER], target[TYPE_POINTER]),
+            self.ent_pointer(output[ENTITY_POINTER], target[ENTITY_POINTER])
         ))
 
         dtype = task_losses.dtype
@@ -351,6 +357,9 @@ class MultiTaskLoss(nn.Module):
 
         return {
             LOGICAL_FORM: losses[0],
+            PREDICATE_POINTER: losses[1],
+            TYPE_POINTER: losses[2],
+            ENTITY_POINTER: losses[3],
             MULTITASK: losses.mean()
         }[args.task]
 

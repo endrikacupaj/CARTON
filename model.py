@@ -1,3 +1,4 @@
+import json
 import math
 import torch
 import torch.nn as nn
@@ -13,18 +14,19 @@ class CARTON(nn.Module):
         self.vocabs = vocabs
         self.encoder = Encoder(vocabs[INPUT], DEVICE)
         self.decoder = Decoder(vocabs[LOGICAL_FORM], DEVICE)
-        self.classifier = StackedPointerNetworks(vocabs[PREDICATE_POINTER], vocabs[TYPE_POINTER])
+        self.stptr_net = StackedPointerNetworks(vocabs[PREDICATE_POINTER], vocabs[TYPE_POINTER], vocabs[ENTITY_POINTER])
 
-    def forward(self, src_tokens, trg_tokens):
+    def forward(self, src_tokens, trg_tokens, batch_entities):
         encoder_out = self.encoder(src_tokens)
         decoder_out, decoder_h = self.decoder(src_tokens, trg_tokens, encoder_out)
         encoder_ctx = encoder_out[:, -1:, :]
-        predicate_out, type_out = self.classifier(encoder_ctx, decoder_h)
+        stacked_pointer_out = self.stptr_net(encoder_ctx, decoder_h, batch_entities)
 
         return {
             LOGICAL_FORM: decoder_out,
-            PREDICATE_POINTER: predicate_out,
-            TYPE_POINTER: type_out
+            PREDICATE_POINTER: stacked_pointer_out[PREDICATE_POINTER],
+            TYPE_POINTER: stacked_pointer_out[TYPE_POINTER],
+            ENTITY_POINTER: stacked_pointer_out[ENTITY_POINTER]
         }
 
     def _predict_encoder(self, src_tensor):
@@ -44,49 +46,82 @@ class CARTON(nn.Module):
                 DECODER_OUT: decoder_out
             }
 
+class PointerStack(nn.Module):
+    def __init__(self, vocab):
+        super(PointerStack, self).__init__()
+        self.predicates = torch.tensor(list(vocab.stoi.values())).to(DEVICE)
+        self.embeddings = nn.Embedding(len(vocab), args.emb_dim)
+        self.dropout = nn.Dropout(args.dropout)
+        self.tahn = nn.Tanh()
+        self.linear_out = nn.Linear(args.emb_dim, 1)
+
+    def forward(self, x):
+        embed = self.embeddings(self.predicates).unsqueeze(0)
+        x = x.expand(x.shape[0], x.shape[1], embed.shape[1], x.shape[-1])
+        x = x + embed.expand(x.shape[0], x.shape[1], embed.shape[1], embed.shape[-1])
+        x = self.tahn(x)
+        x = self.linear_out(x)
+
+        return x.squeeze(-1)
+
+class EntityPointerStack(nn.Module):
+    def __init__(self, entity_vocab):
+        super(EntityPointerStack, self).__init__()
+        self.entity_embeddings = json.loads(open(f'{ROOT_PATH}{args.embedding_path}').read())
+        self.entity_vocab = entity_vocab.itos
+        self.linear_in = nn.Linear(args.bert_dim, args.emb_dim)
+        self.dropout = nn.Dropout(args.dropout)
+        self.tahn = nn.Tanh()
+        self.linear_out = nn.Linear(args.emb_dim, 1)
+
+    def _prepare_batch(self, batch_entities):
+        batch_embed = []
+        for entities in batch_entities:
+            temp = []
+            for id in entities:
+                ent = self.entity_vocab[id]
+                temp.append(torch.tensor(self.entity_embeddings[ent]))
+            batch_embed.append(torch.stack(temp))
+
+        return torch.stack(batch_embed)
+
+    def forward(self, x, batch_entities):
+        batch_embedding = self._prepare_batch(batch_entities).to(DEVICE)
+        embed = self.linear_in(batch_embedding).unsqueeze(1)
+        x = x.expand(x.shape[0], x.shape[1], embed.shape[1], x.shape[-1])
+        x = x + embed.expand(x.shape[0], x.shape[1], embed.shape[2], embed.shape[-1])
+        x = self.tahn(x)
+        x = self.linear_out(x)
+
+        return x.squeeze(-1)
+
+
+class StackedPointerNetworks(nn.Module):
+    def __init__(self, predicate_vocab, type_vocab, entity_vocab):
+        super(StackedPointerNetworks, self).__init__()
+
+        self.context_linear = nn.Linear(args.emb_dim*2, args.emb_dim)
+        self.dropout = nn.Dropout(args.dropout)
+
+        self.predicate_pointer = PointerStack(predicate_vocab)
+        self.type_pointer = PointerStack(type_vocab)
+        self.entity_pointer = EntityPointerStack(entity_vocab)
+
+
+    def forward(self, encoder_ctx, decoder_h, batch_entities):
+        x = torch.cat([encoder_ctx.expand(decoder_h.shape), decoder_h], dim=-1)
+        x = self.context_linear(x).unsqueeze(2)
+        x = self.dropout(x)
+
+        return {
+            PREDICATE_POINTER: self.predicate_pointer(x),
+            TYPE_POINTER: self.type_pointer(x),
+            ENTITY_POINTER: self.entity_pointer(x, batch_entities)
+        }
+
 class Flatten(nn.Module):
     def forward(self, x):
         return x.contiguous().view(-1, x.shape[-1])
-
-class StackedPointerNetworks(nn.Module):
-    def __init__(self, predicate_vocab, type_vocab):
-        super(StackedPointerNetworks, self).__init__()
-
-        self.predicates = torch.tensor(list(predicate_vocab.stoi.values())).to(DEVICE)
-        self.types = torch.tensor(list(type_vocab.stoi.values())).to(DEVICE)
-
-        self.predicate_embeddings = nn.Embedding(len(predicate_vocab), args.emb_dim)
-        self.type_embeddings = nn.Embedding(len(type_vocab), args.emb_dim)
-
-        self.dropout = nn.Dropout(args.dropout)
-        self.context_linear = nn.Linear(args.emb_dim*2, args.emb_dim)
-
-        self.tahn = nn.Tanh()
-
-        self.predicate_out = nn.Linear(args.emb_dim, 1)
-        self.type_out = nn.Linear(args.emb_dim, 1)
-
-    def forward(self, encoder_ctx, decoder_h):
-        pred_embed = self.predicate_embeddings(self.predicates).unsqueeze(0)
-        type_embed = self.type_embeddings(self.types).unsqueeze(0)
-
-        x = torch.cat([encoder_ctx.expand(decoder_h.shape), decoder_h], dim=-1)
-        x = self.context_linear(x).unsqueeze(2)
-
-        pred_x = x.expand(x.shape[0], x.shape[1], pred_embed.shape[1], x.shape[-1])
-        type_x = x.expand(x.shape[0], x.shape[1], type_embed.shape[1], x.shape[-1])
-
-        pred_x = pred_x + pred_embed.expand(x.shape[0], x.shape[1], pred_embed.shape[1], pred_embed.shape[-1])
-        type_x = type_x + type_embed.expand(x.shape[0], x.shape[1], type_embed.shape[1], type_embed.shape[-1])
-
-        pred_x = self.tahn(pred_x)
-        type_x = self.tahn(type_x)
-
-        pred_x = self.predicate_out(pred_x)
-        type_x = self.type_out(type_x)
-
-        return pred_x.squeeze(-1), type_x.squeeze(-1)
-
 
 class ClassifierNetworks(nn.Module):
     def __init__(self, predicate_vocab, type_vocab):

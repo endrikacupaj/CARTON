@@ -10,6 +10,7 @@ def get_parser():
 
     # data
     parser.add_argument('--data_path', default='/data/final/csqa')
+    parser.add_argument('--embedding_path', default='/knowledge_graph/entity_embeddings_1000.json')
 
     # experiments
     parser.add_argument('--snapshots', default='experiments/snapshots', type=str)
@@ -28,7 +29,7 @@ def get_parser():
     parser.add_argument('--layers', default=2, type=int)
     parser.add_argument('--max_positions', default=1000, type=int)
     parser.add_argument('--pf_dim', default=300, type=int)
-    parser.add_argument('--bert_dim', default=3072, type=int)
+    parser.add_argument('--bert_dim', default=768, type=int)
 
     # training
     parser.add_argument('--lr', default=0.0001, type=float)
@@ -41,7 +42,7 @@ def get_parser():
     parser.add_argument('--valfreq', default=1, type=int)
     parser.add_argument('--resume', default='', type=str)
     parser.add_argument('--clip', default=5, type=int)
-    parser.add_argument('--batch_size', default=8, type=int)
+    parser.add_argument('--batch_size', default=50, type=int)
 
     # test and inference
     parser.add_argument('--model_path', default='experiments/snapshots/', type=str)
