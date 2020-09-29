@@ -37,6 +37,7 @@ SEP_TOKEN = '[SEP]'
 NA_TOKEN = 'NA'
 
 GOLD = 'gold'
+LABEL = 'label'
 
 # model
 ENCODER_OUT = 'encoder_out'

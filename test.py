@@ -10,7 +10,7 @@ from pathlib import Path
 from model import CARTON
 from dataset import CSQADataset
 from torchtext.data import BucketIterator
-from utils import SingleTaskLoss, MultiTaskLoss, AverageMeter, Scorer, Predictor
+from utils import SingleTaskLoss, MultiTaskLoss, AverageMeter, Scorer, Predictor, construct_entity_target
 
 # import constants
 from constants import *
@@ -24,6 +24,9 @@ logging.basicConfig(format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
                         logging.StreamHandler()
                     ])
 logger = logging.getLogger(__name__)
+
+# set device
+torch.cuda.set_device(3)
 
 # set a seed value
 random.seed(args.seed)
@@ -46,6 +49,9 @@ def main():
     # define loss function (criterion)
     criterion = {
         LOGICAL_FORM: SingleTaskLoss,
+        PREDICATE_POINTER: SingleTaskLoss,
+        TYPE_POINTER: SingleTaskLoss,
+        ENTITY_POINTER: SingleTaskLoss,
         MULTITASK: MultiTaskLoss
     }[args.task](ignore_index=vocabs[LOGICAL_FORM].stoi[PAD_TOKEN])
 
@@ -70,28 +76,26 @@ def main():
     logger.info(f"Test data: {len(test_data.examples)}")
 
     # calculate loss
-    val_loss = test(val_loader, model, vocabs, criterion)
+    val_loss = test(val_loader, model, vocabs, val_helper, criterion)
     logger.info(f'* Val Loss: {val_loss:.4f}')
-    test_loss = test(test_loader, model, vocabs, criterion)
+    test_loss = test(test_loader, model, vocabs, test_helper, criterion)
     logger.info(f'* Test Loss: {test_loss:.4f}')
 
     # calculate accuracy
-    predictor = Predictor(model, vocabs, DEVICE)
-    # val_scorer = Scorer()
+    predictor = Predictor(model, vocabs)
     test_scorer = Scorer()
-    # val_scorer.data_score(val_data.examples, val_helper, predictor)
     test_scorer.data_score(test_data.examples, test_helper, predictor)
     test_scorer.write_results()
 
     # log results
-    for partition, results in [['Test', test_scorer.results]]: # [['Val', val_scorer.results], ['Test', test_scorer.results]]:
+    for partition, results in [['Test', test_scorer.results]]:
         logger.info(f'* {partition} Data Results:')
         for question_type, question_type_results in results.items():
             logger.info(f'\t{question_type}:')
             for task, task_result in question_type_results.items():
                 logger.info(f'\t\t{task}: {task_result.accuracy:.4f}')
 
-def test(loader, model, vocabs, criterion):
+def test(loader, model, vocabs, helper_data, criterion):
     losses = AverageMeter()
 
     # switch to evaluate mode
@@ -102,13 +106,19 @@ def test(loader, model, vocabs, criterion):
             # get inputs
             input = batch.input
             logical_form = batch.logical_form
+            predicate_t = batch.predicate_pointer
+            type_t = batch.type_pointer
+            ent_batch = batch.entity_pointer
 
             # compute output
-            output = model(input, logical_form[:, :-1])
+            output = model(input, logical_form[:, :-1], ent_batch)
 
             # prepare targets
             target = {
                 LOGICAL_FORM: logical_form[:, 1:].contiguous().view(-1), # (batch_size * trg_len)
+                PREDICATE_POINTER: predicate_t[:, 1:].contiguous().view(-1),
+                TYPE_POINTER: type_t[:, 1:].contiguous().view(-1),
+                ENTITY_POINTER: construct_entity_target(batch.id, helper_data, vocabs[ID], predicate_t.shape[-1])[:, 1:].contiguous().view(-1)
             }
 
             # compute loss

@@ -17,7 +17,7 @@ class CSQADataset:
     def _prepare_data(self, data):
         input_data = []
         helper_data = {
-            QUESTION_TYPE: [], ENTITY: {GOLD: {}}}
+            QUESTION_TYPE: [], ENTITY: {GOLD: {}, LABEL: {}}}
         for j, conversation in enumerate(data):
             prev_user_conv = None
             prev_system_conv = None
@@ -28,7 +28,8 @@ class CSQADataset:
                 input = []
                 logical_form = []
                 entity_pointer = set()
-                entity_gold = []
+                entity_idx = []
+                entity_label = []
                 predicate_pointer = []
                 type_pointer = []
 
@@ -155,6 +156,7 @@ class CSQADataset:
 
                 # prepare entities
                 entity_pointer = list(entity_pointer)
+                entity_pointer.insert(0, PAD_TOKEN)
                 entity_pointer.insert(0, NA_TOKEN)
 
                 # prepare logical form
@@ -163,38 +165,45 @@ class CSQADataset:
                         logical_form.append(action[1])
                         predicate_pointer.append(NA_TOKEN)
                         type_pointer.append(NA_TOKEN)
-                        entity_gold.append(entity_pointer.index(NA_TOKEN))
+                        entity_idx.append(entity_pointer.index(NA_TOKEN))
+                        entity_label.append(NA_TOKEN)
                     elif action[0] == RELATION:
                         logical_form.append(RELATION)
                         predicate_pointer.append(action[1])
                         type_pointer.append(NA_TOKEN)
-                        entity_gold.append(entity_pointer.index(NA_TOKEN))
+                        entity_idx.append(entity_pointer.index(NA_TOKEN))
+                        entity_label.append(NA_TOKEN)
                     elif action[0] == TYPE:
                         logical_form.append(TYPE)
                         predicate_pointer.append(NA_TOKEN)
                         type_pointer.append(action[1])
-                        entity_gold.append(entity_pointer.index(NA_TOKEN))
+                        entity_idx.append(entity_pointer.index(NA_TOKEN))
+                        entity_label.append(NA_TOKEN)
                     elif action[0] == ENTITY:
                         logical_form.append(PREV_ANSWER if action[1] == PREV_ANSWER else ENTITY)
                         predicate_pointer.append(NA_TOKEN)
                         type_pointer.append(NA_TOKEN)
-                        entity_gold.append(entity_pointer.index(action[1]) if action[1] != PREV_ANSWER else entity_pointer.index(NA_TOKEN))
+                        entity_idx.append(entity_pointer.index(action[1] if action[1] != PREV_ANSWER else NA_TOKEN))
+                        entity_label.append(action[1] if action[1] != PREV_ANSWER else NA_TOKEN)
                     elif action[0] == VALUE:
                         logical_form.append(action[0])
                         predicate_pointer.append(NA_TOKEN)
                         type_pointer.append(NA_TOKEN)
-                        entity_gold.append(entity_pointer.index(NA_TOKEN))
+                        entity_idx.append(entity_pointer.index(NA_TOKEN))
+                        entity_label.append(NA_TOKEN)
                     else:
                         raise Exception(f'Unkown logical form action {action[0]}')
 
                 assert len(logical_form) == len(predicate_pointer)
                 assert len(logical_form) == len(type_pointer)
-                assert len(logical_form) == len(entity_gold)
+                assert len(logical_form) == len(entity_idx)
+                assert len(logical_form) == len(entity_label)
 
                 input_data.append([str(self.id), input, logical_form, predicate_pointer, type_pointer, entity_pointer])
 
                 helper_data[QUESTION_TYPE].append(user['question-type'])
-                helper_data[ENTITY][GOLD][str(self.id)] = entity_gold
+                helper_data[ENTITY][GOLD][str(self.id)] = entity_idx
+                helper_data[ENTITY][LABEL][str(self.id)] = entity_label
 
                 self.id += 1
 
@@ -357,17 +366,17 @@ class CSQADataset:
         train, val, test = [], [], []
         # read data
         train_files = glob(self.train_path + '/*.json')
-        for f in train_files[:1000]:
+        for f in train_files[:60000]:
             with open(f) as json_file:
                 train.append(json.load(json_file))
 
         val_files = glob(self.val_path + '/*.json')
-        for f in val_files[:1000]:
+        for f in val_files:
             with open(f) as json_file:
                 val.append(json.load(json_file))
 
         test_files = glob(self.test_path + '/*.json')
-        for f in test_files[:1000]:
+        for f in test_files:
             with open(f) as json_file:
                 test.append(json.load(json_file))
 
@@ -407,7 +416,7 @@ class CSQADataset:
 
         self.entity_field = Field(init_token=NA_TOKEN,
                                 eos_token=NA_TOKEN,
-                                pad_token=NA_TOKEN,
+                                pad_token=PAD_TOKEN,
                                 unk_token=NA_TOKEN,
                                 batch_first=True)
 

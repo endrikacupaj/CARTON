@@ -29,22 +29,9 @@ class CARTON(nn.Module):
             ENTITY_POINTER: stacked_pointer_out[ENTITY_POINTER]
         }
 
-    def _predict_encoder(self, src_tensor):
-        with torch.no_grad():
-            encoder_out = self.encoder(src_tensor)
-
-        return {
-            ENCODER_OUT: encoder_out
-        }
-
-    def _predict_decoder(self, src_tokens, trg_tokens, encoder_out):
-        with torch.no_grad():
-            decoder_out, decoder_h = self.decoder(src_tokens, trg_tokens, encoder_out)
-            encoder_ctx = encoder_out[:, -1:, :]
-
-            return {
-                DECODER_OUT: decoder_out
-            }
+class Flatten(nn.Module):
+    def forward(self, x):
+        return x.contiguous().view(-1, x.shape[-1])
 
 class PointerStack(nn.Module):
     def __init__(self, vocab):
@@ -53,6 +40,7 @@ class PointerStack(nn.Module):
         self.embeddings = nn.Embedding(len(vocab), args.emb_dim)
         self.dropout = nn.Dropout(args.dropout)
         self.tahn = nn.Tanh()
+        self.flatten = Flatten()
         self.linear_out = nn.Linear(args.emb_dim, 1)
 
     def forward(self, x):
@@ -61,8 +49,10 @@ class PointerStack(nn.Module):
         x = x + embed.expand(x.shape[0], x.shape[1], embed.shape[1], embed.shape[-1])
         x = self.tahn(x)
         x = self.linear_out(x)
+        x = x.squeeze(-1)
+        x = self.flatten(x)
 
-        return x.squeeze(-1)
+        return x
 
 class EntityPointerStack(nn.Module):
     def __init__(self, entity_vocab):
@@ -72,6 +62,7 @@ class EntityPointerStack(nn.Module):
         self.linear_in = nn.Linear(args.bert_dim, args.emb_dim)
         self.dropout = nn.Dropout(args.dropout)
         self.tahn = nn.Tanh()
+        self.flatten = Flatten()
         self.linear_out = nn.Linear(args.emb_dim, 1)
 
     def _prepare_batch(self, batch_entities):
@@ -92,8 +83,10 @@ class EntityPointerStack(nn.Module):
         x = x + embed.expand(x.shape[0], x.shape[1], embed.shape[2], embed.shape[-1])
         x = self.tahn(x)
         x = self.linear_out(x)
+        x = x.squeeze(-1)
+        x = self.flatten(x)
 
-        return x.squeeze(-1)
+        return x
 
 
 class StackedPointerNetworks(nn.Module):
@@ -118,10 +111,6 @@ class StackedPointerNetworks(nn.Module):
             TYPE_POINTER: self.type_pointer(x),
             ENTITY_POINTER: self.entity_pointer(x, batch_entities)
         }
-
-class Flatten(nn.Module):
-    def forward(self, x):
-        return x.contiguous().view(-1, x.shape[-1])
 
 class ClassifierNetworks(nn.Module):
     def __init__(self, predicate_vocab, type_vocab):

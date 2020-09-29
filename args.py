@@ -10,7 +10,7 @@ def get_parser():
 
     # data
     parser.add_argument('--data_path', default='/data/final/csqa')
-    parser.add_argument('--embedding_path', default='/knowledge_graph/entity_embeddings_1000.json')
+    parser.add_argument('--embedding_path', default='/knowledge_graph/entity_embeddings.json')
 
     # experiments
     parser.add_argument('--snapshots', default='experiments/snapshots', type=str)
@@ -19,8 +19,11 @@ def get_parser():
     parser.add_argument('--path_inference', default='experiments/inference', type=str)
 
     # task
-    parser.add_argument('--task', default='logical_form', choices=['multitask',
-                                                                'logical_form'], type=str)
+    parser.add_argument('--task', default='multitask', choices=['multitask',
+                                                                'logical_form',
+                                                                'predicate_pointer',
+                                                                'type_pointer',
+                                                                'entity_pointer'], type=str)
 
     # model
     parser.add_argument('--emb_dim', default=300, type=int)
@@ -42,10 +45,10 @@ def get_parser():
     parser.add_argument('--valfreq', default=1, type=int)
     parser.add_argument('--resume', default='', type=str)
     parser.add_argument('--clip', default=5, type=int)
-    parser.add_argument('--batch_size', default=50, type=int)
+    parser.add_argument('--batch_size', default=25, type=int)
 
     # test and inference
-    parser.add_argument('--model_path', default='experiments/snapshots/', type=str)
+    parser.add_argument('--model_path', default='experiments/snapshots/CARTON_e9_v0.3324_multitask.pth.tar', type=str)
     parser.add_argument('--inference_partition', default='test', choices=['val', 'test'], type=str)
     parser.add_argument('--question_type', default='Clarification',
         choices=['Clarification',

@@ -14,7 +14,8 @@ from dataset import CSQADataset
 from torchtext.data import BucketIterator
 from utils import (NoamOpt, AverageMeter,
                     SingleTaskLoss, MultiTaskLoss,
-                    save_checkpoint, init_weights)
+                    save_checkpoint, init_weights,
+                    construct_entity_target)
 
 # import constants
 from constants import *
@@ -24,13 +25,13 @@ logging.basicConfig(format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
                     datefmt='%d/%m/%Y %I:%M:%S %p',
                     level=logging.INFO,
                     handlers=[
-                        #logging.FileHandler(f'{args.path_results}/train_{args.task}.log', 'w'),
+                        logging.FileHandler(f'{args.path_results}/train_{args.task}.log', 'w'),
                         logging.StreamHandler()
                     ])
 logger = logging.getLogger(__name__)
 
 # set device
-torch.cuda.set_device(0)
+torch.cuda.set_device(1)
 
 # set a seed value
 random.seed(args.seed)
@@ -109,12 +110,12 @@ def main():
             val_loss = validate(val_loader, model, vocabs, val_helper, criterion)
             # if val_loss < best_val:
             best_val = min(val_loss, best_val) # log every validation step
-            # save_checkpoint({
-            #     EPOCH: epoch + 1,
-            #     STATE_DICT: model.state_dict(),
-            #     BEST_VAL: best_val,
-            #     OPTIMIZER: optimizer.optimizer.state_dict(),
-            #     CURR_VAL: val_loss})
+            save_checkpoint({
+                EPOCH: epoch + 1,
+                STATE_DICT: model.state_dict(),
+                BEST_VAL: best_val,
+                OPTIMIZER: optimizer.optimizer.state_dict(),
+                CURR_VAL: val_loss})
             logger.info(f'* Val loss: {val_loss:.4f}')
 
 def train(train_loader, model, vocabs, helper_data, criterion, optimizer, epoch):
@@ -127,7 +128,6 @@ def train(train_loader, model, vocabs, helper_data, criterion, optimizer, epoch)
     end = time.time()
     for i, batch in enumerate(train_loader):
         # get inputs
-        id_batch = batch.id
         input = batch.input
         logical_form = batch.logical_form
         predicate_t = batch.predicate_pointer
@@ -137,22 +137,12 @@ def train(train_loader, model, vocabs, helper_data, criterion, optimizer, epoch)
         # compute output
         output = model(input, logical_form[:, :-1], ent_batch)
 
-        # construct entity target
-        ent_t = []
-        for id in id_batch:
-            e_t = [vocabs[ID].stoi[NA_TOKEN]] # start token
-            e_t.extend(helper_data[ENTITY][GOLD][vocabs[ID].itos[id]])
-            while len(e_t) < predicate_t.shape[-1]: # add end token and padding
-                e_t.append(vocabs[ID].stoi[NA_TOKEN])
-            ent_t.append(torch.tensor(e_t))
-        ent_t = torch.stack(ent_t)
-
         # prepare targets
         target = {
             LOGICAL_FORM: logical_form[:, 1:].contiguous().view(-1), # (batch_size * trg_len)
-            PREDICATE_POINTER: predicate_t.contiguous().view(-1),
-            TYPE_POINTER: type_t.contiguous().view(-1),
-            ENTITY_POINTER: ent_t.contiguous().view(-1)
+            PREDICATE_POINTER: predicate_t[:, 1:].contiguous().view(-1),
+            TYPE_POINTER: type_t[:, 1:].contiguous().view(-1),
+            ENTITY_POINTER: construct_entity_target(batch.id, helper_data, vocabs[ID], predicate_t.shape[-1])[:, 1:].contiguous().view(-1)
         }
 
         # compute loss
@@ -182,7 +172,6 @@ def validate(val_loader, model, vocabs, helper_data, criterion):
     with torch.no_grad():
         for _, batch in enumerate(val_loader):
             # get inputs
-            id_batch = batch.id
             input = batch.input
             logical_form = batch.logical_form
             predicate_t = batch.predicate_pointer
@@ -192,22 +181,12 @@ def validate(val_loader, model, vocabs, helper_data, criterion):
             # compute output
             output = model(input, logical_form[:, :-1], ent_batch)
 
-            # construct entity target
-            ent_t = []
-            for id in id_batch:
-                e_t = [vocabs[ID].stoi[NA_TOKEN]] # start token
-                e_t.extend(helper_data[ENTITY][GOLD][vocabs[ID].itos[id]])
-                while len(e_t) < predicate_t.shape[-1]: # add end token and padding
-                    e_t.append(vocabs[ID].stoi[NA_TOKEN])
-                ent_t.append(torch.tensor(e_t))
-            ent_t = torch.stack(ent_t)
-
             # prepare targets
             target = {
                 LOGICAL_FORM: logical_form[:, 1:].contiguous().view(-1), # (batch_size * trg_len)
-                PREDICATE_POINTER: predicate_t.contiguous().view(-1),
-                TYPE_POINTER: type_t.contiguous().view(-1),
-                ENTITY_POINTER: ent_t.contiguous().view(-1)
+                PREDICATE_POINTER: predicate_t[:, 1:].contiguous().view(-1),
+                TYPE_POINTER: type_t[:, 1:].contiguous().view(-1),
+                ENTITY_POINTER: construct_entity_target(batch.id, helper_data, vocabs[ID], predicate_t.shape[-1])[:, 1:].contiguous().view(-1)
             }
 
             # compute loss

@@ -72,41 +72,60 @@ class AverageMeter(object):
 
 class Predictor(object):
     """Predictor class"""
-    def __init__(self, model, vocabs, device):
+    def __init__(self, model, vocabs):
         self.model = model
         self.vocabs = vocabs
-        self.device = device
 
-    def predict(self, input):
+    def predict(self, input, ent_cand, helper):
         """Perform prediction on given input example"""
         self.model.eval()
         model_out = {}
+
         # prepare input
         tokenized_sentence = [START_TOKEN] + [t.lower() for t in input] + [CTX_TOKEN]
         numericalized = [self.vocabs[INPUT].stoi[token] if token in self.vocabs[INPUT].stoi else self.vocabs[INPUT].stoi[UNK_TOKEN] for token in tokenized_sentence]
-        src_tensor = torch.LongTensor(numericalized).unsqueeze(0).to(self.device)
+        src_tensor = torch.LongTensor(numericalized).unsqueeze(0).to(DEVICE)
+
+        # prepare entity candidates
+        numericalized_ent_cand = [self.vocabs[ENTITY_POINTER].stoi[entity] for entity in ent_cand]
+        ent_cand_tensor = torch.LongTensor(numericalized_ent_cand).unsqueeze(0).to(DEVICE)
 
         with torch.no_grad():
             # get ner, coref predictions
-            encoder_step = self.model._predict_encoder(src_tensor)
+            encoder_out = self.model.encoder(src_tensor)
+            encoder_ctx = encoder_out[:, -1:, :]
 
             # get logical form, predicate and type prediction
             lf_out = [self.vocabs[LOGICAL_FORM].stoi[START_TOKEN]]
+            pd_out = [self.vocabs[PREDICATE_POINTER].stoi[NA_TOKEN]]
+            tp_out = [self.vocabs[TYPE_POINTER].stoi[NA_TOKEN]]
+            en_out = [self.vocabs[ENTITY_POINTER].stoi[NA_TOKEN]]
 
             for _ in range(self.model.decoder.max_positions):
-                lf_tensor = torch.LongTensor(lf_out).unsqueeze(0).to(self.device)
+                lf_tensor = torch.LongTensor(lf_out).unsqueeze(0).to(DEVICE)
 
-                decoder_step = self.model._predict_decoder(src_tensor, lf_tensor, encoder_step[ENCODER_OUT])
+                # decoder_step = self.model._predict_decoder(src_tensor, lf_tensor, encoder_step[ENCODER_OUT])
+                decoder_out, decoder_h = self.model.decoder(src_tensor, lf_tensor, encoder_out)
+                stacked_pointer_out = self.model.stptr_net(encoder_ctx, decoder_h, ent_cand_tensor)
 
-                pred_lf = decoder_step[DECODER_OUT].argmax(1)[-1].item()
+                pred_lf = decoder_out.argmax(1)[-1].item()
+                pred_pd = stacked_pointer_out[PREDICATE_POINTER].argmax(1)[-1].item()
+                pred_tp = stacked_pointer_out[TYPE_POINTER].argmax(1)[-1].item()
+                pred_en = stacked_pointer_out[ENTITY_POINTER].argmax(1)[-1].item()
 
                 if pred_lf == self.vocabs[LOGICAL_FORM].stoi[END_TOKEN]:
                     break
 
                 lf_out.append(pred_lf)
+                pd_out.append(pred_pd)
+                tp_out.append(pred_tp)
+                en_out.append(pred_en)
 
         # translate top predictions into vocab tokens
         model_out[LOGICAL_FORM] = [self.vocabs[LOGICAL_FORM].itos[i] for i in lf_out][1:]
+        model_out[PREDICATE_POINTER] = [self.vocabs[PREDICATE_POINTER].itos[i] for i in pd_out][1:]
+        model_out[TYPE_POINTER] = [self.vocabs[TYPE_POINTER].itos[i] for i in tp_out][1:]
+        model_out[ENTITY_POINTER] = [self.vocabs[ENTITY_POINTER].itos[i] for i in en_out][1:]
 
         return model_out
 
@@ -130,7 +149,7 @@ class AccuracyMeter(object):
 class Scorer(object):
     """Scorer class"""
     def __init__(self):
-        self.tasks = [TOTAL, LOGICAL_FORM]
+        self.tasks = [TOTAL, LOGICAL_FORM, PREDICATE_POINTER, TYPE_POINTER, ENTITY_POINTER]
         self.results = {
             OVERALL: {task:AccuracyMeter() for task in self.tasks},
             CLARIFICATION: {task:AccuracyMeter() for task in self.tasks},
@@ -152,33 +171,51 @@ class Scorer(object):
         for i, (example, q_type)  in enumerate(zip(data, helper['question_type'])):
             # prepare references
             ref_lf = [t.lower() for t in example.logical_form]
-            ref_ner = example.ner
-            ref_coref = example.coref
-            ref_graph = example.graph
+            ref_pd = example.predicate_pointer
+            ref_tp = example.type_pointer
+            ref_en = helper[ENTITY][LABEL][example.id[0]]
 
             # get model hypothesis
-            hypothesis = predictor.predict(example.input)
+            hypothesis = predictor.predict(example.input, example.entity_pointer, helper)
 
             # check correctness
             correct_lf = 1 if ref_lf == hypothesis[LOGICAL_FORM] else 0
+            correct_pd = 1 if ref_pd == hypothesis[PREDICATE_POINTER] else 0
+            correct_tp = 1 if ref_tp == hypothesis[TYPE_POINTER] else 0
+            correct_en = 1 if ref_en == hypothesis[ENTITY_POINTER] else 0
 
             # save results
             gold = 1
-            res = 1 if correct_lf else 0
+            res = 1 if correct_lf and correct_pd and correct_tp and correct_en else 0
             # Question type
             self.results[q_type][TOTAL].update(gold, res)
             self.results[q_type][LOGICAL_FORM].update(ref_lf, hypothesis[LOGICAL_FORM])
+            self.results[q_type][PREDICATE_POINTER].update(ref_pd, hypothesis[PREDICATE_POINTER])
+            self.results[q_type][TYPE_POINTER].update(ref_tp, hypothesis[TYPE_POINTER])
+            self.results[q_type][ENTITY_POINTER].update(ref_en, hypothesis[ENTITY_POINTER])
             # Overall
             self.results[OVERALL][TOTAL].update(gold, res)
             self.results[OVERALL][LOGICAL_FORM].update(ref_lf, hypothesis[LOGICAL_FORM])
+            self.results[OVERALL][PREDICATE_POINTER].update(ref_pd, hypothesis[PREDICATE_POINTER])
+            self.results[OVERALL][TYPE_POINTER].update(ref_tp, hypothesis[TYPE_POINTER])
+            self.results[OVERALL][ENTITY_POINTER].update(ref_en, hypothesis[ENTITY_POINTER])
 
             # save data
             self.data_dict.append({
                 INPUT: example.input,
                 LOGICAL_FORM: hypothesis[LOGICAL_FORM],
-                f'{LOGICAL_FORM}_gold': example.logical_form,
+                f'{LOGICAL_FORM}_gold': ref_lf,
+                PREDICATE_POINTER: hypothesis[PREDICATE_POINTER],
+                f'{PREDICATE_POINTER}_gold': ref_pd,
+                TYPE_POINTER: hypothesis[TYPE_POINTER],
+                f'{TYPE_POINTER}_gold': ref_tp,
+                ENTITY_POINTER: hypothesis[ENTITY_POINTER],
+                f'{TYPE_POINTER}_gold': ref_en,
                 # ------------------------------------
                 f'{LOGICAL_FORM}_correct': correct_lf,
+                f'{PREDICATE_POINTER}_correct': correct_pd,
+                f'{TYPE_POINTER}_correct': correct_tp,
+                f'{ENTITY_POINTER}_correct': correct_en,
                 IS_CORRECT: res,
                 QUESTION_TYPE: q_type
             })
@@ -368,3 +405,13 @@ def init_weights(model):
     for p in model.parameters():
         if p.dim() > 1:
             nn.init.xavier_uniform_(p)
+
+def construct_entity_target(id_batch, helper_data, vocab, max_size):
+    ent_t = []
+    for id in id_batch:
+        e_t = [vocab.stoi[NA_TOKEN]] # start token
+        e_t.extend(helper_data[ENTITY][GOLD][vocab.itos[id]])
+        while len(e_t) < max_size: # add end token and padding
+            e_t.append(vocab.stoi[NA_TOKEN])
+        ent_t.append(torch.tensor(e_t))
+    return torch.stack(ent_t).to(DEVICE)
