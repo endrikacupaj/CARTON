@@ -414,9 +414,7 @@ class CSQADataset:
                                 unk_token=NA_TOKEN,
                                 batch_first=True)
 
-        self.entity_field = Field(init_token=NA_TOKEN,
-                                eos_token=NA_TOKEN,
-                                pad_token=PAD_TOKEN,
+        self.entity_field = Field(pad_token=PAD_TOKEN,
                                 unk_token=NA_TOKEN,
                                 batch_first=True)
 

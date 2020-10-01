@@ -406,12 +406,11 @@ def init_weights(model):
         if p.dim() > 1:
             nn.init.xavier_uniform_(p)
 
-def construct_entity_target(id_batch, helper_data, vocab, max_size):
+def construct_entity_target(id_batch, helper_data, vocabs, max_size):
     ent_t = []
-    for id in id_batch:
-        e_t = [vocab.stoi[NA_TOKEN]] # start token
-        e_t.extend(helper_data[ENTITY][GOLD][vocab.itos[id]])
-        while len(e_t) < max_size: # add end token and padding
-            e_t.append(vocab.stoi[NA_TOKEN])
+    for idx in id_batch:
+        id = vocabs[ID].itos[idx]
+        e_t = helper_data[ENTITY][GOLD][id]
+        while len(e_t) < max_size: e_t.append(vocabs[ENTITY_POINTER].stoi[PAD_TOKEN]) # add padding
         ent_t.append(torch.tensor(e_t))
     return torch.stack(ent_t).to(DEVICE)

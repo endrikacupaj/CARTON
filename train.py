@@ -132,17 +132,17 @@ def train(train_loader, model, vocabs, helper_data, criterion, optimizer, epoch)
         logical_form = batch.logical_form
         predicate_t = batch.predicate_pointer
         type_t = batch.type_pointer
-        ent_batch = batch.entity_pointer
+        entity_t = construct_entity_target(batch.id, helper_data, vocabs, predicate_t.shape[-1])
 
         # compute output
-        output = model(input, logical_form[:, :-1], ent_batch)
+        output = model(input, logical_form[:, :-1], batch.entity_pointer)
 
         # prepare targets
         target = {
             LOGICAL_FORM: logical_form[:, 1:].contiguous().view(-1), # (batch_size * trg_len)
             PREDICATE_POINTER: predicate_t[:, 1:].contiguous().view(-1),
             TYPE_POINTER: type_t[:, 1:].contiguous().view(-1),
-            ENTITY_POINTER: construct_entity_target(batch.id, helper_data, vocabs[ID], predicate_t.shape[-1])[:, 1:].contiguous().view(-1)
+            ENTITY_POINTER: entity_t[:, 1:].contiguous().view(-1)
         }
 
         # compute loss
@@ -176,17 +176,17 @@ def validate(val_loader, model, vocabs, helper_data, criterion):
             logical_form = batch.logical_form
             predicate_t = batch.predicate_pointer
             type_t = batch.type_pointer
-            ent_batch = batch.entity_pointer
+            entity_t = construct_entity_target(batch.id, helper_data, vocabs, predicate_t.shape[-1])
 
             # compute output
-            output = model(input, logical_form[:, :-1], ent_batch)
+            output = model(input, logical_form[:, :-1], batch.entity_pointer)
 
             # prepare targets
             target = {
                 LOGICAL_FORM: logical_form[:, 1:].contiguous().view(-1), # (batch_size * trg_len)
                 PREDICATE_POINTER: predicate_t[:, 1:].contiguous().view(-1),
                 TYPE_POINTER: type_t[:, 1:].contiguous().view(-1),
-                ENTITY_POINTER: construct_entity_target(batch.id, helper_data, vocabs[ID], predicate_t.shape[-1])[:, 1:].contiguous().view(-1)
+                ENTITY_POINTER: entity_t[:, 1:].contiguous().view(-1)
             }
 
             # compute loss
