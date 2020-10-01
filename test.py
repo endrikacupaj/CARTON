@@ -26,7 +26,7 @@ logging.basicConfig(format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 logger = logging.getLogger(__name__)
 
 # set device
-torch.cuda.set_device(3)
+torch.cuda.set_device(0)
 
 # set a seed value
 random.seed(args.seed)
@@ -108,7 +108,7 @@ def test(loader, model, vocabs, helper_data, criterion):
             logical_form = batch.logical_form
             predicate_t = batch.predicate_pointer
             type_t = batch.type_pointer
-            entity_t = construct_entity_target(batch.id, helper_data, vocabs[ID], predicate_t.shape[-1])
+            entity_t = construct_entity_target(batch.id, helper_data, vocabs, predicate_t.shape[-1])
 
             # compute output
             output = model(input, logical_form[:, :-1], batch.entity_pointer)
