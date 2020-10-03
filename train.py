@@ -108,7 +108,6 @@ def main():
         # evaluate on validation set
         if (epoch+1) % args.valfreq == 0:
             val_loss = validate(val_loader, model, vocabs, val_helper, criterion)
-            # if val_loss < best_val:
             best_val = min(val_loss, best_val) # log every validation step
             save_checkpoint({
                 EPOCH: epoch + 1,
@@ -139,7 +138,7 @@ def train(train_loader, model, vocabs, helper_data, criterion, optimizer, epoch)
 
         # prepare targets
         target = {
-            LOGICAL_FORM: logical_form[:, 1:].contiguous().view(-1), # (batch_size * trg_len)
+            LOGICAL_FORM: logical_form[:, 1:].contiguous().view(-1),
             PREDICATE_POINTER: predicate_t[:, 1:].contiguous().view(-1),
             TYPE_POINTER: type_t[:, 1:].contiguous().view(-1),
             ENTITY_POINTER: entity_t[:, 1:].contiguous().view(-1)
@@ -183,7 +182,7 @@ def validate(val_loader, model, vocabs, helper_data, criterion):
 
             # prepare targets
             target = {
-                LOGICAL_FORM: logical_form[:, 1:].contiguous().view(-1), # (batch_size * trg_len)
+                LOGICAL_FORM: logical_form[:, 1:].contiguous().view(-1),
                 PREDICATE_POINTER: predicate_t[:, 1:].contiguous().view(-1),
                 TYPE_POINTER: type_t[:, 1:].contiguous().view(-1),
                 ENTITY_POINTER: entity_t[:, 1:].contiguous().view(-1)

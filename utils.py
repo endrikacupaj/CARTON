@@ -76,7 +76,7 @@ class Predictor(object):
         self.model = model
         self.vocabs = vocabs
 
-    def predict(self, input, ent_cand, helper):
+    def predict(self, input, ent_cand):
         """Perform prediction on given input example"""
         self.model.eval()
         model_out = {}
@@ -125,7 +125,7 @@ class Predictor(object):
         model_out[LOGICAL_FORM] = [self.vocabs[LOGICAL_FORM].itos[i] for i in lf_out][1:]
         model_out[PREDICATE_POINTER] = [self.vocabs[PREDICATE_POINTER].itos[i] for i in pd_out][1:]
         model_out[TYPE_POINTER] = [self.vocabs[TYPE_POINTER].itos[i] for i in tp_out][1:]
-        model_out[ENTITY_POINTER] = [self.vocabs[ENTITY_POINTER].itos[i] for i in en_out][1:]
+        model_out[ENTITY_POINTER] = [ent_cand[i] for i in en_out][:-1]
 
         return model_out
 
@@ -176,7 +176,7 @@ class Scorer(object):
             ref_en = helper[ENTITY][LABEL][example.id[0]]
 
             # get model hypothesis
-            hypothesis = predictor.predict(example.input, example.entity_pointer, helper)
+            hypothesis = predictor.predict(example.input, example.entity_pointer)
 
             # check correctness
             correct_lf = 1 if ref_lf == hypothesis[LOGICAL_FORM] else 0
@@ -409,8 +409,8 @@ def init_weights(model):
 def construct_entity_target(id_batch, helper_data, vocabs, max_size):
     ent_t = []
     for idx in id_batch:
-        id = vocabs[ID].itos[idx]
-        e_t = helper_data[ENTITY][GOLD][id]
+        e_t = helper_data[ENTITY][GOLD][vocabs[ID].itos[idx]]
         while len(e_t) < max_size: e_t.append(vocabs[ENTITY_POINTER].stoi[PAD_TOKEN]) # add padding
+        while len(e_t) > max_size: e_t.pop()
         ent_t.append(torch.tensor(e_t))
     return torch.stack(ent_t).to(DEVICE)

@@ -45,11 +45,10 @@ def get_parser():
     parser.add_argument('--valfreq', default=1, type=int)
     parser.add_argument('--resume', default='', type=str)
     parser.add_argument('--clip', default=5, type=int)
-    parser.add_argument('--batch_size', default=20, type=int)
+    parser.add_argument('--batch_size', default=25, type=int)
 
     # test and inference
-    parser.add_argument('--model_path', default='experiments/snapshots/CARTON_e14_v0.1576_multitask.pth.tar', type=str)
-    parser.add_argument('--inference_partition', default='test', choices=['val', 'test'], type=str)
+    parser.add_argument('--model_path', default='experiments/snapshots/CARTON_e35_v0.0318_multitask.pth.tar', type=str)
     parser.add_argument('--question_type', default='Clarification',
         choices=['Clarification',
                 'Comparative Reasoning (All)',
