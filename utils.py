@@ -87,7 +87,7 @@ class Predictor(object):
         src_tensor = torch.LongTensor(numericalized).unsqueeze(0).to(DEVICE)
 
         # prepare entity candidates
-        numericalized_ent_cand = [self.vocabs[ENTITY_POINTER].stoi[entity] for entity in ent_cand]
+        numericalized_ent_cand = [self.vocabs[ENTITY_POINTER].stoi[entity] for entity in ent_cand if entity in self.vocabs[ENTITY_POINTER].stoi]
         ent_cand_tensor = torch.LongTensor(numericalized_ent_cand).unsqueeze(0).to(DEVICE)
 
         with torch.no_grad():
@@ -249,7 +249,7 @@ class Inference(object):
         # based on model outpus create a final logical form to execute
         question_type_inference_data = [data for data in inference_data if args.question_type in data[QUESTION_TYPE]]
         for i, sample in enumerate(question_type_inference_data):
-            predictions = predictor.predict(sample['context_question'])
+            predictions = predictor.predict(sample[CONTEXT_QUESTION], sample[CONTEXT_ENTITIES])
             actions = []
             logical_form_prediction = predictions[LOGICAL_FORM]
             ent_count_pos = 0
@@ -257,11 +257,14 @@ class Inference(object):
                 if action not in [ENTITY, RELATION, TYPE, VALUE, PREV_ANSWER]:
                     actions.append([ACTION, action])
                 elif action == ENTITY:
-                    actions.append([ENTITY, ENTITY])
+                    entity_prediction = predictions[ENTITY_POINTER]
+                    actions.append([ENTITY, entity_prediction[j]])
                 elif action == RELATION:
-                    actions.append([RELATION, RELATION])
+                    predicate_prediction = predictions[PREDICATE_POINTER]
+                    actions.append([RELATION, predicate_prediction[j]])
                 elif action == TYPE:
-                    actions.append([TYPE, TYPE])
+                    type_prediction = predictions[TYPE_POINTER]
+                    actions.append([TYPE, type_prediction[j]])
                 elif action == VALUE:
                     try:
                         actions.append([VALUE, self.get_value(sample[QUESTION])])
@@ -349,7 +352,7 @@ class Inference(object):
         return value
 
     def write_inference_actions(self):
-        with open(f'{ROOT_PATH}/{args.path_inference}/{args.model_path.rsplit("/", 1)[-1].rsplit(".", 2)[0]}_{args.inference_partition}_{args.question_type}.json', 'w', encoding='utf-8') as json_file:
+        with open(f'{ROOT_PATH}/{args.path_inference}/{args.model_path.rsplit("/", 1)[-1].rsplit(".", 2)[0]}_{args.question_type}.json', 'w', encoding='utf-8') as json_file:
             json_file.write(json.dumps(self.inference_actions, indent=4))
 
 def save_checkpoint(state):

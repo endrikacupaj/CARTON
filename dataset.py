@@ -209,13 +209,8 @@ class CSQADataset:
 
         return input_data, helper_data
 
-    def get_inference_data(self, inference_partition):
-        if inference_partition == 'val':
-            files = glob(self.val_path + '/*.json')
-        elif inference_partition == 'test':
-            files = glob(self.test_path + '/*.json')
-        else:
-            raise ValueError(f'Unknown inference partion {inference_partition}')
+    def get_inference_data(self):
+        files = glob(self.test_path + '/*.json')
 
         partition = []
         for f in files:
@@ -268,40 +263,42 @@ class CSQADataset:
                         input.extend([NA_TOKEN, SEP_TOKEN, NA_TOKEN, SEP_TOKEN])
                     else:
                         # add prev context user
-                        for context in prev_user_conv['context']:
-                            input.append(context[1])
+                        for context in prev_user_conv['context']: input.append(context[1])
 
                         # sep token
                         input.append(SEP_TOKEN)
 
                         # add prev context answer
-                        for context in prev_system_conv['context']:
-                            input.append(context[1])
+                        for context in prev_system_conv['context']: input.append(context[1])
 
                         # sep token
                         input.append(SEP_TOKEN)
 
                     # user context
-                    for context in user['context']:
-                        input.append(context[1])
+                    for context in user['context']: input.append(context[1])
 
                     # system context
-                    for context in system['context']:
-                        input.append(context[1])
+                    for context in system['context']: input.append(context[1])
 
                     # next user context
-                    for context in next_user['context']:
-                        input.append(context[1])
+                    for context in next_user['context']: input.append(context[1])
 
                     question_type = [user['question-type'], next_user['question-type']] if 'question-type' in next_user else user['question-type']
                     results = next_system['all_entities']
                     answer = next_system['utterance']
                     gold_actions = next_system[GOLD_ACTIONS] if GOLD_ACTIONS in next_system else None
                     prev_answer = prev_system_conv['all_entities'] if 'all_entities' in prev_system_conv else None
-                    context_entities = user['entities_in_utterance'] + system['entities_in_utterance']
-                    if 'entities_in_utterance' in next_user: context_entities.extend(next_user['entities_in_utterance'])
-                    if 'entities_in_utterance' in prev_user_conv: context_entities.extend(prev_user_conv['entities_in_utterance'])
-                    if 'entities_in_utterance' in prev_system_conv: context_entities.extend(prev_system_conv['entities_in_utterance'])
+
+                    # entities turn
+                    context_entities = set()
+                    if 'entities' in prev_user_conv: context_entities.update(prev_user_conv['entities'])
+                    if 'entities_in_utterance' in prev_user_conv: context_entities.update(prev_user_conv['entities_in_utterance'])
+                    if prev_system_conv: context_entities.update(prev_system_conv['entities_in_utterance'])
+                    if 'entities' in user: context_entities.update(user['entities'])
+                    if 'entities_in_utterance' in user: context_entities.update(user['entities_in_utterance'])
+                    context_entities.update(system['entities_in_utterance'])
+                    if 'entities' in next_user: context_entities.update(next_user['entities'])
+                    if 'entities_in_utterance' in next_user: context_entities.update(next_user['entities_in_utterance'])
 
                     # track context history
                     prev_user_conv = next_user.copy()
@@ -329,21 +326,30 @@ class CSQADataset:
                         user['context'] = [[i, tok] for i, tok in enumerate(tok_utterance)]
 
                     # user context
-                    for context in user['context']:
-                        input.append(context[1])
+                    for context in user['context']: input.append(context[1])
 
                     question_type = user['question-type']
                     results = system['all_entities']
                     answer = system['utterance']
                     gold_actions = system[GOLD_ACTIONS] if GOLD_ACTIONS in system else None
                     prev_results = prev_system_conv['all_entities'] if 'all_entities' in prev_system_conv else None
-                    context_entities = user['entities_in_utterance'] + system['entities_in_utterance']
-                    if 'entities_in_utterance' in prev_user_conv: context_entities.extend(prev_user_conv['entities_in_utterance'])
-                    if 'entities_in_utterance' in prev_system_conv: context_entities.extend(prev_system_conv['entities_in_utterance'])
+
+                    # entities turn
+                    context_entities = set()
+                    if prev_user_conv is not None and prev_system_conv is not None:
+                        if 'entities' in prev_user_conv: context_entities.update(prev_user_conv['entities'])
+                        if 'entities_in_utterance' in prev_user_conv: context_entities.update(prev_user_conv['entities_in_utterance'])
+                        if prev_system_conv: context_entities.update(prev_system_conv['entities_in_utterance'])
+                    if 'entities' in user: context_entities.update(user['entities'])
+                    if 'entities_in_utterance' in user: context_entities.update(user['entities_in_utterance'])
 
                     # track context history
                     prev_user_conv = user.copy()
                     prev_system_conv = system.copy()
+
+                context_entities = list(context_entities)
+                context_entities.insert(0, PAD_TOKEN)
+                context_entities.insert(0, NA_TOKEN)
 
                 inference_data.append({
                     QUESTION_TYPE: question_type,
@@ -366,7 +372,7 @@ class CSQADataset:
         train, val, test = [], [], []
         # read data
         train_files = glob(self.train_path + '/*.json')
-        for f in train_files[:60000]:
+        for f in train_files:
             with open(f) as json_file:
                 train.append(json.load(json_file))
 

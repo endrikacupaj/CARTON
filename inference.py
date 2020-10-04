@@ -2,7 +2,7 @@ import random
 import logging
 import torch
 import numpy as np
-from model import LASAGNE
+from model import CARTON
 from dataset import CSQADataset
 from utils import Predictor, Inference
 
@@ -19,6 +19,9 @@ logging.basicConfig(format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
                     ])
 logger = logging.getLogger(__name__)
 
+# set device
+torch.cuda.set_device(3)
+
 # set a seed value
 random.seed(args.seed)
 np.random.seed(args.seed)
@@ -31,15 +34,14 @@ def main():
     # load data
     dataset = CSQADataset()
     vocabs = dataset.get_vocabs()
-    inference_data = dataset.get_inference_data(args.inference_partition)
+    inference_data = dataset.get_inference_data()
 
-    logger.info(f'Inference partition: {args.inference_partition}')
     logger.info(f'Inference question type: {args.question_type}')
     logger.info('Inference data prepared')
     logger.info(f"Num of inference data: {len(inference_data)}")
 
     # load model
-    model = LASAGNE(vocabs).to(DEVICE)
+    model = CARTON(vocabs).to(DEVICE)
 
     logger.info(f"=> loading checkpoint '{args.model_path}'")
     if DEVICE.type=='cpu':
@@ -51,7 +53,7 @@ def main():
     logger.info(f"=> loaded checkpoint '{args.model_path}' (epoch {checkpoint['epoch']})")
 
     # construct actions
-    predictor = Predictor(model, vocabs, DEVICE)
+    predictor = Predictor(model, vocabs)
     Inference().construct_actions(inference_data, predictor)
 
 if __name__ == '__main__':
