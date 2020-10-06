@@ -36,7 +36,7 @@ class Flatten(nn.Module):
 class PointerStack(nn.Module):
     def __init__(self, vocab):
         super(PointerStack, self).__init__()
-        self.predicates = torch.tensor(list(vocab.stoi.values())).to(DEVICE)
+        self.kg_items = torch.tensor(list(vocab.stoi.values())).to(DEVICE)
         self.embeddings = nn.Embedding(len(vocab), args.emb_dim)
         self.dropout = nn.Dropout(args.dropout)
         self.tahn = nn.Tanh()
@@ -44,7 +44,7 @@ class PointerStack(nn.Module):
         self.linear_out = nn.Linear(args.emb_dim, 1)
 
     def forward(self, x):
-        embed = self.embeddings(self.predicates).unsqueeze(0)
+        embed = self.embeddings(self.kg_items).unsqueeze(0)
         x = x.expand(x.shape[0], x.shape[1], embed.shape[1], x.shape[-1])
         x = x + embed.expand(x.shape[0], x.shape[1], embed.shape[1], embed.shape[-1])
         x = self.tahn(x)
