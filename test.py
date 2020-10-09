@@ -20,7 +20,7 @@ logging.basicConfig(format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
 logger = logging.getLogger(__name__)
 
 # set device
-torch.cuda.set_device(3)
+torch.cuda.set_device(2)
 
 # set a seed value
 random.seed(args.seed)
