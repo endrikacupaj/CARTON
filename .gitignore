@@ -3,3 +3,4 @@ __pycache__*
 .vector_cache*
 plan.txt
 knowledge_graph/*.json
+task_analysis.py
