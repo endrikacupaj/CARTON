@@ -1,4 +1,4 @@
-# Context Transformer with Stacked Pointer Networks for Conversational Question Answering over Knowledge Graph
+# Context Transformer with Stacked Pointer Networks for Conversational Question Answering over Knowledge Graphs
 
 Detailed steps on how to execute the framework will be available soon!
 
