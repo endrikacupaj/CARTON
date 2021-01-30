@@ -23,7 +23,7 @@ You can download the preprocessed files from [here](https://zenodo.org/record/40
 After dowloading you will need to move them under the [knowledge_graph](knowledge_graph) directory.
 
 ## Annotate Dataset
-Next, using the preproccesed Wikidata files we can annotate annotate CSQA dataset with the grammar proposed in our paper.
+Next, using the preproccesed Wikidata files we can annotate CSQA dataset with our proposed grammar.
 ``` bash
 # annotate CSQA dataset with proposed grammar
 python annotate_csqa/preprocess.py --partition train --annotation_task actions --read_folder /path/to/CSQA --write_folder /path/to/write
