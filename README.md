@@ -75,7 +75,7 @@ The repository is under [MIT License](LICENCE).
 ## Cite
 ```bash
 @inproceedings{
-    plepi2021context,
+    plepi2021carton,
     title={Context Transformer with Stacked Pointer Networks for Conversational Question Answering over Knowledge Graphs},
     author={Joan Plepi and Endri Kacupaj and Kuldeep Singh and Harsh Thakkar and Jens Lehmann},
     booktitle={Eighteenth Extended Semantic Web Conference - Research Track},
