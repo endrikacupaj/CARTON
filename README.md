@@ -59,7 +59,7 @@ After the model has finished training we perform the inference in 2 steps.
 First, we generate the actions and save them in JSON file using the trained model.
 ``` bash
 # generate actions for a specific question type
-python inference.py --question_type Clarification
+python test.py --question_type Clarification
 ```
 
 ## Execute Actions
