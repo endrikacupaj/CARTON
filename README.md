@@ -73,4 +73,13 @@ python action_executor/run.py --file_path /path/to/actions.json --question_type 
 The repository is under [MIT License](LICENCE).
 
 ## Cite
-Coming Soon!
+```bash
+@inproceedings{
+    plepi2021context,
+    title={Context Transformer with Stacked Pointer Networks for Conversational Question Answering over Knowledge Graphs},
+    author={Joan Plepi and Endri Kacupaj and Kuldeep Singh and Harsh Thakkar and Jens Lehmann},
+    booktitle={Eighteenth Extended Semantic Web Conference - Research Track},
+    year={2021},
+    url={https://openreview.net/forum?id=Ecd_zT8KJoQ}
+}
+```
